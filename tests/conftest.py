@@ -50,6 +50,7 @@ def user_extra_avro_atributes_dataclass():
         name: str
         age: int
 
+        @staticmethod
         def extra_avro_attributes() -> typing.Dict[str, typing.Any]:
             return {
                 "namespace": "test.com.ar/user/v1",
@@ -88,6 +89,23 @@ def user_advance_with_defaults_dataclass():
 
     return UserAdvance
 
+@pytest.fixture
+def user_union_record_dataclass():
+    class Phone:
+        number: str
+    class Email:
+        mail: str
+
+    @dataclasses.dataclass(repr=False)
+    class UserUnionRecord:
+        name: str
+        age: int
+        has_pets: bool
+        money: float
+        encoded: bytes
+        contact: typing.Union[Phone, Email]
+
+    return UserUnionRecord
 
 def load_json(file_name):
     schema_path = os.path.join(AVRO_SCHEMAS_DIR, file_name)
@@ -134,7 +152,10 @@ def user_many_address_schema():
 def user_many_address_map_schema():
     return load_json("user_many_address_map.avsc")
 
-
 @pytest.fixture
 def user_self_refernece_schema():
     return load_json("user_self_reference_one_to_many.avsc")
+
+@pytest.fixture
+def user_union_record_schema():
+    return load_json("user_union_record.avsc")

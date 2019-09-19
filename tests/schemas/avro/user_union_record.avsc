@@ -1,0 +1,51 @@
+{
+  "type": "record",
+  "name": "UserUnionRecord",
+  "fields": [
+    {
+      "name": "name",
+      "type": "string"
+    },
+    {
+      "name": "age",
+      "type": "int"
+    },
+    {
+      "name": "has_pets",
+      "type": "boolean"
+    },
+    {
+      "name": "money",
+      "type": "float"
+    },
+    {
+      "name": "encoded",
+      "type": "bytes"
+    },
+    {
+      "name": "contact",
+      "type": [
+        {
+          "type": "record",
+          "name": "Phone",
+          "fields": [
+            {
+              "name": "number",
+              "type": "string"
+            }
+          ]
+        },
+        {
+          "type": "record",
+          "name": "Email",
+          "fields": [
+            {
+              "name": "mail",
+              "type": "string"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
