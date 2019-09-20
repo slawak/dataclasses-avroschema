@@ -91,19 +91,47 @@ def user_advance_with_defaults_dataclass():
 
 @pytest.fixture
 def user_union_record_dataclass():
+    @dataclasses.dataclass(repr=False)
     class Phone:
+        "Phone"
         number: str
+    @dataclasses.dataclass(repr=False)
     class Email:
+        "Email"
         mail: str
 
     @dataclasses.dataclass(repr=False)
     class UserUnionRecord:
+        "UserUnionRecord"
         name: str
         age: int
         has_pets: bool
         money: float
         encoded: bytes
         contact: typing.Union[Phone, Email]
+
+    return UserUnionRecord
+
+@pytest.fixture
+def user_complex_union_record_dataclass():
+    @dataclasses.dataclass(repr=False)
+    class Phone:
+        "Phone"
+        number: typing.Union[str,int]
+    @dataclasses.dataclass(repr=False)
+    class Email:
+        "Email"
+        mail: typing.List[str]
+
+    @dataclasses.dataclass(repr=False)
+    class UserUnionRecord:
+        "UserUnionRecord"
+        name: str
+        age: int
+        has_pets: bool
+        money: float
+        encoded: bytes
+        contact: typing.Dict[str, typing.Union[Phone, Email]]
 
     return UserUnionRecord
 

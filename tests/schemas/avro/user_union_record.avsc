@@ -28,12 +28,14 @@
         {
           "type": "record",
           "name": "Phone",
+          
           "fields": [
             {
               "name": "number",
               "type": "string"
             }
-          ]
+          ],
+          "doc": "Phone"
         },
         {
           "type": "record",
@@ -43,9 +45,11 @@
               "name": "mail",
               "type": "string"
             }
-          ]
+          ],
+          "doc": "Email"
         }
       ]
     }
-  ]
+  ],
+  "doc": "UserUnionRecord"
 }

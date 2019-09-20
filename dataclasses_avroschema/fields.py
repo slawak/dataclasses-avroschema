@@ -77,6 +77,8 @@ class Field:
             return self._process_dict_type
         elif origin is tuple:
             return self._process_tuple_type
+        elif origin is typing.Union:
+            return self._process_union_type
         else:
             # we do not accept any other typing._GenericAlias like a set
             # we should raise an exception
@@ -89,6 +91,8 @@ class Field:
 
         if items_type in PYTHON_PRIMITIVE_TYPES:
             self.items_type = PYTHON_TYPE_TO_AVRO[items_type]
+        elif hasattr(items_type,'__origin__') and items_type.__origin__ is typing.Union:
+            self.values_type = list(self._process_union_type_list(items_type.__args__))
         elif isinstance(items_type, typing._GenericAlias):
             # Checking for a self reference. Maybe is a typing.ForwardRef
             self.items_type = self._process_self_reference_type(items_type)
@@ -103,6 +107,8 @@ class Field:
 
         if values_type in PYTHON_PRIMITIVE_TYPES:
             self.values_type = PYTHON_TYPE_TO_AVRO[values_type]
+        elif hasattr(values_type,'__origin__') and values_type.__origin__ is typing.Union:
+            self.values_type = list(self._process_union_type_list(values_type.__args__))
         else:
             self.values_type = schema_generator.SchemaGenerator(
                 values_type).avro_schema_to_python()
@@ -115,6 +121,18 @@ class Field:
 
         assert isinstance(internal_type, typing.ForwardRef), "Expecting a self reference"
         return internal_type.__forward_arg__
+
+    def _process_union_type(self):
+        self.values_type = list(self._process_union_type_list(self.type.__args__))
+        
+    def _process_union_type_list(self, values_types):
+        for values_type in values_types:
+            if values_type in PYTHON_PRIMITIVE_TYPES:
+                yield PYTHON_TYPE_TO_AVRO[values_type]
+            else:
+                yield schema_generator.SchemaGenerator(
+                    values_type).avro_schema_to_python()
+
 
     @staticmethod
     def get_singular_name(name):
@@ -145,6 +163,8 @@ class Field:
 
             avro_type["name"] = self.get_singular_name(self.name)
             return avro_type
+        elif self.type is typing.Union:
+            return self.values_type
         else:
             # we need to see what to to when is a custom type
             # is a record schema
