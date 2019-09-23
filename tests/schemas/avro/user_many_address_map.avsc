@@ -31,6 +31,24 @@
                 },
                 "name": "address"
             }
+        },
+        {
+            "name": "phones",
+            "type": {
+                "type": "map",
+                "values": {
+                    "type": "record",
+                    "name": "Phone",
+                    "fields": [
+                        {
+                            "name": "number",
+                            "type": "string"
+                        }
+                    ],
+                    "doc": "An Phonenumber"
+                },
+                "name": "phone"
+            }
         } 
     ],
     "doc": "User with multiple Address"

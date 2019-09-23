@@ -144,6 +144,9 @@ class Field:
 
     def get_avro_type(self) -> PythonPrimitiveTypes:
         avro_type = PYTHON_TYPE_TO_AVRO.get(self.type)
+        # copy record template
+        if isinstance(avro_type, dict):
+            avro_type = dict(avro_type)
 
         if self.type in PYTHON_INMUTABLE_TYPES:
             if self.default is not dataclasses.MISSING and self.type is not tuple:

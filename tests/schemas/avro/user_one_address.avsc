@@ -27,7 +27,21 @@
                 ],
                 "doc": "An Address"
             }
-        } 
+        },
+        {
+            "name": "phone",
+            "type": {
+                "type": "record",
+                "name": "Phone",
+                "fields": [
+                    {
+                        "name": "number",
+                        "type": "string"
+                    }
+                ],
+                "doc": "An Phonenumber"
+            }
+        }
     ],
     "doc": "An User with Address"
 }
