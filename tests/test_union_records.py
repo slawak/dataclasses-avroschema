@@ -20,3 +20,11 @@ def test_complex_union_record(user_complex_union_record_dataclass):
     """
     schema = SchemaGenerator(user_complex_union_record_dataclass).avro_schema()
     parse_schema(json.loads(schema))
+
+
+def test_complex_union_map_record(user_complex_union_record_map_dataclass):
+    """
+    Test union
+    """
+    schema = SchemaGenerator(user_complex_union_record_map_dataclass).avro_schema()
+    parse_schema(json.loads(schema))

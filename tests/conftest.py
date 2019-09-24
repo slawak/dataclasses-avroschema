@@ -131,9 +131,33 @@ def user_complex_union_record_dataclass():
         has_pets: bool
         money: float
         encoded: bytes
+        contact: typing.List[typing.Union[Phone, Email]]
+
+    return UserUnionRecord
+
+@pytest.fixture
+def user_complex_union_record_map_dataclass():
+    @dataclasses.dataclass(repr=False)
+    class Phone:
+        "Phone"
+        number: typing.Union[str,int]
+    @dataclasses.dataclass(repr=False)
+    class Email:
+        "Email"
+        mail: typing.List[str]
+
+    @dataclasses.dataclass(repr=False)
+    class UserUnionRecord:
+        "UserUnionRecord"
+        name: str
+        age: int
+        has_pets: bool
+        money: float
+        encoded: bytes
         contact: typing.Dict[str, typing.Union[Phone, Email]]
 
     return UserUnionRecord
+
 
 def load_json(file_name):
     schema_path = os.path.join(AVRO_SCHEMAS_DIR, file_name)
@@ -181,8 +205,12 @@ def user_many_address_map_schema():
     return load_json("user_many_address_map.avsc")
 
 @pytest.fixture
-def user_self_refernece_schema():
+def user_self_referenece_schema():
     return load_json("user_self_reference_one_to_many.avsc")
+
+@pytest.fixture
+def user_self_referenece_map_schema():
+    return load_json("user_self_reference_one_to_many_map.avsc")
 
 @pytest.fixture
 def user_union_record_schema():

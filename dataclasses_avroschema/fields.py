@@ -63,7 +63,7 @@ class Field:
 
     def __post_init__(self):
         if isinstance(self.type, typing._GenericAlias):
-            # means that could be a list, tuple or dict
+           # means that could be a list, tuple or dict
             origin = self.type.__origin__
             processor = self.get_processor(origin)
             processor()
@@ -79,6 +79,8 @@ class Field:
             return self._process_tuple_type
         elif origin is typing.Union:
             return self._process_union_type
+        elif origin is type:
+            return self._process_self_reference_type_single
         else:
             # we do not accept any other typing._GenericAlias like a set
             # we should raise an exception
@@ -91,8 +93,8 @@ class Field:
 
         if items_type in PYTHON_PRIMITIVE_TYPES:
             self.items_type = PYTHON_TYPE_TO_AVRO[items_type]
-        elif hasattr(items_type,'__origin__') and items_type.__origin__ is typing.Union:
-            self.values_type = list(self._process_union_type_list(items_type.__args__))
+        elif hasattr(items_type, '__origin__') and items_type.__origin__ is typing.Union:
+            self.items_type = list(self._process_union_type_list(items_type.__args__))
         elif isinstance(items_type, typing._GenericAlias):
             # Checking for a self reference. Maybe is a typing.ForwardRef
             self.items_type = self._process_self_reference_type(items_type)
@@ -107,14 +109,20 @@ class Field:
 
         if values_type in PYTHON_PRIMITIVE_TYPES:
             self.values_type = PYTHON_TYPE_TO_AVRO[values_type]
-        elif hasattr(values_type,'__origin__') and values_type.__origin__ is typing.Union:
+        elif hasattr(values_type, '__origin__') and values_type.__origin__ is typing.Union:
             self.values_type = list(self._process_union_type_list(values_type.__args__))
+        elif isinstance(values_type, typing._GenericAlias):
+            # Checking for a self reference. Maybe is a typing.ForwardRef
+            self.values_type = self._process_self_reference_type(values_type)
         else:
             self.values_type = schema_generator.SchemaGenerator(
                 values_type).avro_schema_to_python()
 
     def _process_tuple_type(self):
         self.symbols = list(self.default)
+
+    def _process_self_reference_type_single(self):
+        self.values_type = self._process_self_reference_type(self.type)
 
     def _process_self_reference_type(self, items_type):
         internal_type = items_type.__args__[0]
@@ -124,15 +132,20 @@ class Field:
 
     def _process_union_type(self):
         self.values_type = list(self._process_union_type_list(self.type.__args__))
-        
+
     def _process_union_type_list(self, values_types):
         for values_type in values_types:
             if values_type in PYTHON_PRIMITIVE_TYPES:
                 yield PYTHON_TYPE_TO_AVRO[values_type]
+            elif values_type is type(None):
+                yield NULL
+            elif isinstance(values_type, typing._GenericAlias) \
+                    and values_type.__origin__ is type \
+                    and isinstance(values_type.__args__[0], typing.ForwardRef):
+                yield self._process_self_reference_type(values_type)
             else:
                 yield schema_generator.SchemaGenerator(
                     values_type).avro_schema_to_python()
-
 
     @staticmethod
     def get_singular_name(name):
@@ -168,6 +181,8 @@ class Field:
             return avro_type
         elif self.type is typing.Union:
             return self.values_type
+        elif self.type is type:
+            return self.values_type
         else:
             # we need to see what to to when is a custom type
             # is a record schema
@@ -189,13 +204,15 @@ class Field:
             if self.type is list:
                 # expeting a callable
                 default = self.default_factory()
-                assert isinstance(default, list), f"List is required as default for field {self.name}"
+                assert isinstance(
+                    default, list), f"List is required as default for field {self.name}"
 
                 return default
             elif self.type is dict:
                 # expeting a callable
                 default = self.default_factory()
-                assert isinstance(default, dict), f"Dict is required as default for field {self.name}"
+                assert isinstance(
+                    default, dict), f"Dict is required as default for field {self.name}"
 
                 return default
 
