@@ -223,3 +223,7 @@ def user_self_referenece_map_schema():
 @pytest.fixture
 def user_union_record_schema():
     return load_json("user_union_record.avsc")
+
+@pytest.fixture
+def record_logical_types_schema():
+    return load_json("record_logical_types.avsc")

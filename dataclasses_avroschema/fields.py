@@ -2,6 +2,8 @@ import json
 import dataclasses
 import typing
 import inflect
+import datetime
+import uuid
 
 from collections import OrderedDict
 
@@ -18,6 +20,11 @@ STRING = "string"
 ARRAY = "array"
 ENUM = "enum"
 MAP = "map"
+LONG = "long"
+TIMESTAMP_MICROS = "timestamp-micros"
+TIME_MICROS = "time-micros"
+DATE = "date"
+UUID = "uuid"
 
 
 PYTHON_TYPE_TO_AVRO = {
@@ -30,10 +37,18 @@ PYTHON_TYPE_TO_AVRO = {
     list: {"type": ARRAY},
     tuple: {"type": ENUM},
     dict: {"type": MAP},
+    datetime.time: {"type": LONG, "logicalType": TIME_MICROS},
+    datetime.datetime: {"type": LONG, "logicalType": TIMESTAMP_MICROS},
+    datetime.date: {"type": INT, "logicalType": DATE},
+    uuid.UUID: {"type": STRING, "logicalType": UUID},
 }
 
 # excluding tuple because is a container
-PYTHON_INMUTABLE_TYPES = (str, int, bool, float, bytes)
+PYTHON_PRIMITIVE_TYPES = (str, int, bool, float, bytes)
+
+PYTHON_LOGICAL_TYPES = (datetime.date, datetime.time, datetime.datetime, uuid.UUID)
+
+PYTHON_INMUTABLE_TYPES = PYTHON_PRIMITIVE_TYPES + PYTHON_LOGICAL_TYPES
 
 PYTHON_PRIMITIVE_CONTAINERS = (list, tuple, dict)
 

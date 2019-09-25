@@ -1,0 +1,35 @@
+{
+    "type": "record",
+    "name": "TestRecord",
+    "fields": [
+        {
+            "name": "timestamp",
+            "type": {
+                "type": "long",
+                "logicalType": "timestamp-micros"
+            }
+        },
+        {
+            "name": "date",
+            "type": {
+                "type": "int",
+                "logicalType": "date"
+            }
+        },
+        {
+            "name": "time",
+            "type": {
+                "type": "long",
+                "logicalType": "time-micros"
+            }
+        },
+        {
+            "name": "uuid",
+            "type": {
+                "type": "string",
+                "logicalType": "uuid"
+            }
+        }
+    ],
+    "doc": "A Record"
+}
