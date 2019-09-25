@@ -1,5 +1,6 @@
 import json
 import typing
+from fastavro import parse_schema
 
 from dataclasses_avroschema.schema_generator import SchemaGenerator
 
@@ -92,7 +93,7 @@ def test_one_to_many_map_relationship(user_many_address_map_schema):
 #     assert schema == json.dumps(user_self_refernece_schema)
 
 
-def test_recursive_one_to_many_relationship(user_self_referenece_schema):
+def test_recursive_one_to_many_relationship(user_self_referenece_list_schema):
     """
     Test self relationship one-to-many
     """
@@ -104,8 +105,8 @@ def test_recursive_one_to_many_relationship(user_self_referenece_schema):
         friends: typing.List[typing.Type["User"]]
 
     schema = SchemaGenerator(User).avro_schema()
-
-    assert schema == json.dumps(user_self_referenece_schema)
+    parse_schema(json.loads(schema))
+    assert schema == json.dumps(user_self_referenece_list_schema)
 
 def test_recursive_one_to_many_map_relationship(user_self_referenece_map_schema):
     """
@@ -119,7 +120,7 @@ def test_recursive_one_to_many_map_relationship(user_self_referenece_map_schema)
         friends: typing.Dict[str, typing.Type["User"]]
 
     schema = SchemaGenerator(User).avro_schema()
-
+    parse_schema(json.loads(schema))
     assert schema == json.dumps(user_self_referenece_map_schema)
 
 
@@ -135,9 +136,10 @@ def test_recursive_one_to_one_relationship(user_self_referenece_schema):
         friend: typing.Type["User"]
 
     schema = SchemaGenerator(User).avro_schema()
-    assert schema != None
+    parse_schema(json.loads(schema))
+    assert schema == json.dumps(user_self_referenece_schema)
 
-def test_recursive_one_to_one_union_relationship(user_self_referenece_schema):
+def test_recursive_one_to_one_union_relationship(user_self_referenece_union_schema):
     """
     Test self relationship one-to-many
     """
@@ -149,4 +151,6 @@ def test_recursive_one_to_one_union_relationship(user_self_referenece_schema):
         friend: typing.Union[typing.Type["User"], None]
 
     schema = SchemaGenerator(User).avro_schema()
-    assert schema != None
+    parse_schema(json.loads(schema))
+    assert schema == json.dumps(user_self_referenece_union_schema)
+
