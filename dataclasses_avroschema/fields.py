@@ -9,6 +9,11 @@ from collections import OrderedDict
 
 from dataclasses_avroschema import schema_generator
 
+try:
+    import faust
+except ImportError:
+    faust = None  # type: ignore
+
 p = inflect.engine()
 
 BOOLEAN = "boolean"
@@ -134,7 +139,10 @@ class Field:
                 values_type).avro_schema_to_python()
 
     def _process_tuple_type(self):
-        self.symbols = list(self.default)
+        if faust and isinstance(self.default, faust.models.FieldDescriptor):
+            self.symbols = list(self.default.default)
+        else:    
+            self.symbols = list(self.default)
 
     def _process_self_reference_type_single(self):
         self.values_type = self._process_self_reference_type(self.type)
@@ -177,7 +185,9 @@ class Field:
             avro_type = dict(avro_type)
 
         if self.type in PYTHON_INMUTABLE_TYPES:
-            if self.default is not dataclasses.MISSING and self.type is not tuple:
+            if self.default is not dataclasses.MISSING and self.type is not tuple \
+                    and (not faust or faust and not isinstance(self.default, faust.models.FieldDescriptor) \
+                    or isinstance(self.default, faust.models.FieldDescriptor) and not self.default.required):
                 if self.default is not None:
                     return [avro_type, NULL]
                 # means that default value is None
@@ -206,6 +216,12 @@ class Field:
     def get_default_value(self):
         if self.default is not dataclasses.MISSING:
             if self.type in PYTHON_INMUTABLE_TYPES:
+                if faust and isinstance(self.default, faust.models.FieldDescriptor):
+                    if self.default.required:
+                        return None
+                    if self.default.default is None:
+                        return NULL
+                    return self.default.default
                 if self.default is None:
                     return NULL
                 return self.default

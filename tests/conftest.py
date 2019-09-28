@@ -227,3 +227,7 @@ def user_union_record_schema():
 @pytest.fixture
 def record_logical_types_schema():
     return load_json("record_logical_types.avsc")
+
+@pytest.fixture
+def record_faust_schema():
+    return load_json("record_faust.avsc")

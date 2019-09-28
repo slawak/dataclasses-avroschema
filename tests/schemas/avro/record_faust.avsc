@@ -1,0 +1,57 @@
+{
+    "type": "record",
+    "name": "TestRecord",
+    "fields": [
+        {
+            "name": "timestamp",
+            "type": {
+                "type": "long",
+                "logicalType": "timestamp-micros"
+            }
+        },
+        {
+            "name": "date",
+            "type": {
+                "type": "int",
+                "logicalType": "date"
+            }
+        },
+        {
+            "name": "time",
+            "type": {
+                "type": "long",
+                "logicalType": "time-micros"
+            }
+        },
+        {
+            "name": "uuid",
+            "type": {
+                "type": "string",
+                "logicalType": "uuid"
+            }
+        },
+        {
+            "name": "tuple_field",
+            "type": {
+                "type": "enum",
+                "symbols": [
+                    "YES",
+                    "NO"
+                ],
+                "name": "tuple_field"
+            }
+        },
+        {
+            "name": "nullable_date",
+            "type": [
+                {
+                    "type": "int",
+                    "logicalType": "date"
+                },
+                "null"
+            ],
+            "default": "null"
+        }
+    ],
+    "doc": "A Record"
+}
