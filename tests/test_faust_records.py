@@ -12,12 +12,10 @@ from fastavro._read_py import schemaless_reader
 
 try:
     import faust
+    from dataclasses_avroschema.schema_generator import SchemaGenerator
+    from dataclasses_avroschema.fields_faust import AvroFieldDescriptor, EnumFieldDescriptor
 except ImportError:
     faust = None  # type: ignore
-
-
-from dataclasses_avroschema.schema_generator import SchemaGenerator
-from dataclasses_avroschema.fields_faust import AvroFieldDescriptor, EnumFieldDescriptor
 
 
 def test_faust_record(record_faust_schema):
