@@ -11,6 +11,7 @@ from dataclasses_avroschema import schema_generator
 
 try:
     import faust
+    from dataclasses_avroschema import fields_faust
 except ImportError:
     faust = None  # type: ignore
 
@@ -61,13 +62,13 @@ PYTHON_PRIMITIVE_TYPES = PYTHON_INMUTABLE_TYPES + PYTHON_PRIMITIVE_CONTAINERS
 
 PythonPrimitiveTypes = typing.Union[str, int, bool, float, list, tuple, dict]
 
-
 @dataclasses.dataclass
 class Field:
     name: str
     type: typing.Any  # store the python type
     default: typing.Any = dataclasses.MISSING
     default_factory: typing.Any = None
+    namespace: str = None
 
     # for avro array field
     items_type: typing.Any = None
@@ -82,6 +83,12 @@ class Field:
     avro_type: typing.Any = None
 
     def __post_init__(self):
+        # special annotations for faust records to handle union types
+        if faust and isinstance(self.default, fields_faust.AvroFieldDescriptor):
+            self.type = self.default.avro_type
+        # special annotations for faust recors to handle enums
+        if faust and isinstance(self.default, fields_faust.EnumFieldDescriptor):
+            self.type = typing.Tuple[str]
         if isinstance(self.type, typing._GenericAlias):
            # means that could be a list, tuple or dict
             origin = self.type.__origin__
@@ -110,7 +117,7 @@ class Field:
     def _process_list_type(self):
         # because avro can have only one type, we take the first one
         items_type = self.type.__args__[0]
-
+        
         if items_type in PYTHON_PRIMITIVE_TYPES:
             self.items_type = PYTHON_TYPE_TO_AVRO[items_type]
         elif hasattr(items_type, '__origin__') and items_type.__origin__ is typing.Union:
@@ -139,8 +146,8 @@ class Field:
                 values_type).avro_schema_to_python()
 
     def _process_tuple_type(self):
-        if faust and isinstance(self.default, faust.models.FieldDescriptor):
-            self.symbols = list(self.default.default)
+        if faust and isinstance(self.default, fields_faust.EnumFieldDescriptor):
+            self.symbols = list(self.default.symbols)
         else:    
             self.symbols = list(self.default)
 
@@ -201,6 +208,8 @@ class Field:
                 avro_type["values"] = self.values_type
             elif self.symbols:
                 avro_type["symbols"] = self.symbols
+                if self.namespace:
+                    avro_type["namespace"] = self.namespace
 
             avro_type["name"] = self.get_singular_name(self.name)
             return avro_type

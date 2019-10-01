@@ -1,57 +1,124 @@
-{
-    "type": "record",
-    "name": "TestRecord",
-    "fields": [
-        {
-            "name": "timestamp",
-            "type": {
-                "type": "long",
-                "logicalType": "timestamp-micros"
+[
+    {
+        "type": "record",
+        "name": "__faust",
+        "fields": [
+            {
+                "name": "ns",
+                "type": "string"
             }
-        },
-        {
-            "name": "date",
-            "type": {
-                "type": "int",
-                "logicalType": "date"
+        ],
+        "doc": "Faust meta data"
+    },
+    {
+        "type": "record",
+        "name": "TestRecordChild1",
+        "fields": [
+            {
+                "name": "id",
+                "type": "string"
+            },
+            {
+                "name": "id1",
+                "type": "string"
+            },
+            {
+                "name": "__faust",
+                "type": "__faust"
             }
-        },
-        {
-            "name": "time",
-            "type": {
-                "type": "long",
-                "logicalType": "time-micros"
+        ],
+        "doc": "Child Record1"
+    },
+    {
+        "type": "record",
+        "name": "TestRecordChild2",
+        "fields": [
+            {
+                "name": "id",
+                "type": "string"
+            },
+            {
+                "name": "id2",
+                "type": "string"
+            },
+            {
+                "name": "__faust",
+                "type": "__faust"
             }
-        },
-        {
-            "name": "uuid",
-            "type": {
-                "type": "string",
-                "logicalType": "uuid"
-            }
-        },
-        {
-            "name": "tuple_field",
-            "type": {
-                "type": "enum",
-                "symbols": [
-                    "YES",
-                    "NO"
-                ],
-                "name": "tuple_field"
-            }
-        },
-        {
-            "name": "nullable_date",
-            "type": [
-                {
+        ],
+        "doc": "Child Record2"
+    },
+    {
+        "type": "enum",
+        "symbols": [
+            "YES",
+            "NO"
+        ],
+        "name": "tuple_field"
+    },
+    {
+        "type": "record",
+        "name": "TestRecord",
+        "fields": [
+            {
+                "name": "children",
+                "type": {
+                    "type": "array",
+                    "items": [
+                        "TestRecordChild1",
+                        "TestRecordChild2"
+                    ],
+                    "name": "child"
+                }
+            },
+            {
+                "name": "timestamp",
+                "type": {
+                    "type": "long",
+                    "logicalType": "timestamp-micros"
+                }
+            },
+            {
+                "name": "date",
+                "type": {
                     "type": "int",
                     "logicalType": "date"
-                },
-                "null"
-            ],
-            "default": "null"
-        }
-    ],
-    "doc": "A Record"
-}
+                }
+            },
+            {
+                "name": "time",
+                "type": {
+                    "type": "long",
+                    "logicalType": "time-micros"
+                }
+            },
+            {
+                "name": "uuid",
+                "type": {
+                    "type": "string",
+                    "logicalType": "uuid"
+                }
+            },
+            {
+                "name": "tuple_field",
+                "type": "tuple_field"
+            },
+            {
+                "name": "nullable_date",
+                "type": [
+                    {
+                        "type": "int",
+                        "logicalType": "date"
+                    },
+                    "null"
+                ],
+                "default": "null"
+            },
+            {
+                "name": "__faust",
+                "type": "__faust"
+            }
+        ],
+        "doc": "A Record"
+    }
+]

@@ -49,7 +49,8 @@ class AvroSchemaDefinition(BaseSchemaDefinition):
                 dataclass_field.name,
                 dataclass_field.type,
                 dataclass_field.default,
-                dataclass_field.default_factory
+                dataclass_field.default_factory,
+                self.namespace
             )
             for dataclass_field in dataclasses.fields(self.klass_or_instance)
         ]
