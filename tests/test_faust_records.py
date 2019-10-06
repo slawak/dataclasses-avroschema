@@ -54,6 +54,7 @@ def test_faust_record(record_faust_schema):
         uuid: uuid.UUID
         tuple_field: str = EnumFieldDescriptor(symbols = ['YES','NO'])
         nullable_date: datetime.date = None
+        nullable_float: float = None
 
     schema = SchemaGenerator(TestRecord).avro_schema(flat=True, faust_field=True)
     parsed_schema = parse_schema(json.loads(schema))
@@ -68,6 +69,7 @@ def test_faust_record(record_faust_schema):
         uuid = uuid.UUID('12345678123456781234567812345678'),
         tuple_field="YES",
         nullable_date=None,
+        nullable_float=None
         )
     test_dict = test_record.to_representation()
     

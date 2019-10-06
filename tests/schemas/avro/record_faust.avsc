@@ -106,11 +106,19 @@
             {
                 "name": "nullable_date",
                 "type": [
+                    "null",
                     {
                         "type": "int",
                         "logicalType": "date"
-                    },
-                    "null"
+                    }
+                ],
+                "default": "null"
+            },
+            {
+                "name": "nullable_float",
+                "type": [
+                    "null",
+                    "double"
                 ],
                 "default": "null"
             },

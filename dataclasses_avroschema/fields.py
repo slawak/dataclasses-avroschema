@@ -193,9 +193,13 @@ class Field:
 
         if self.type in PYTHON_INMUTABLE_TYPES:
             if self.default is not dataclasses.MISSING and self.type is not tuple \
-                    and (not faust or faust and not isinstance(self.default, faust.models.FieldDescriptor) \
-                    or isinstance(self.default, faust.models.FieldDescriptor) and not self.default.required):
-                if self.default is not None:
+                    and (not faust \
+                        or faust and not isinstance(self.default, faust.models.FieldDescriptor) \
+                        or faust and isinstance(self.default, faust.models.FieldDescriptor) and not self.default.required):
+                if self.default is not None \
+                    and (not faust
+                        or faust and not isinstance(self.default, faust.models.FieldDescriptor) \
+                        or faust and isinstance(self.default, faust.models.FieldDescriptor) and self.default.default is not None):
                     return [avro_type, NULL]
                 # means that default value is None
                 return [NULL, avro_type]
