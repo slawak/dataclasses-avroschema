@@ -17,7 +17,7 @@ LIST_TYPE_AND_ITEMS_TYPE = (
     (str, "string"),
     (int, "int"),
     (bool, "boolean"),
-    (float, "float"),
+    (float, "double"),
     (bytes, "bytes"),
 )
 

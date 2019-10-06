@@ -5,7 +5,7 @@
     {"name": "name", "type": "string"},
     {"name": "age", "type": "int"},
     {"name": "has_pets", "type": "boolean"},
-    {"name": "money", "type": "float"},
+    {"name": "money", "type": "double"},
     {"name": "encoded", "type": "bytes"}
   ]
 }

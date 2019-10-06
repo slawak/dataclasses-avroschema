@@ -16,7 +16,7 @@
     },
     {
       "name": "money",
-      "type": "float"
+      "type": "double"
     },
     {
       "name": "encoded",
