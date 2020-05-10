@@ -5,6 +5,8 @@ import datetime
 import json
 import typing
 import uuid
+import enum
+
 from collections import OrderedDict
 
 import inflect
@@ -222,6 +224,27 @@ class TupleField(ContainerField):
 
 
 @dataclasses.dataclass
+class EnumField(ContainerField):
+    symbols: typing.Any = None
+    default_factory: typing.Any = None
+
+    def __post_init__(self):
+        self.generate_symbols()
+
+    @property
+    def avro_type(self) -> typing.Dict:
+        return {"type": ENUM, "symbols": self.symbols}
+
+    def get_default_value(self):
+        if self.default is not dataclasses.MISSING:
+            if self.validate_default():
+                return self.default
+
+    def generate_symbols(self):
+        self.symbols = [member.value for member in list(self.type)]
+
+
+@dataclasses.dataclass
 class ListField(ContainerField):
     items_type: typing.Any = None
     default_factory: typing.Any = None
@@ -270,10 +293,9 @@ class ListField(ContainerField):
                 default_factory=self.default_factory,
             )
         else:
-            # Is Avro Record Type
-            self.items_type = schema_generator.SchemaGenerator(
-                items_type
-            ).avro_schema_to_python()
+            items_type = Field(name=str(items_type), native_type=items_type).render()
+            del items_type['name']
+            self.items_type = items_type
 
 
 @dataclasses.dataclass
@@ -322,9 +344,9 @@ class DictField(ContainerField):
             # Checking for a self reference. Maybe is a typing.ForwardRef
             self.values_type = self._get_self_reference_type(values_type)
         else:
-            self.values_type = schema_generator.SchemaGenerator(
-                values_type
-            ).avro_schema_to_python()
+            values_type = Field(name=str(values_type), native_type=values_type).render()
+            del values_type['name']
+            self.values_type = values_type
 
 
 @dataclasses.dataclass
@@ -362,10 +384,8 @@ class UnionField(BaseField):
                 klass = PRIMITIVE_LOGICAL_TYPES_FIELDS_CLASSES[element]
                 union_element = klass.avro_type
             else:
-                union_element = schema_generator.SchemaGenerator(
-                    element
-                ).avro_schema_to_python()
-
+                union_element = Field(name=str(element), native_type=element).render()
+                del union_element['name']
             unions.append(union_element)
 
         if default is None and default_factory is dataclasses.MISSING:
@@ -570,7 +590,27 @@ class UUIDField(LogicalTypeField):
 @dataclasses.dataclass
 class RecordField(BaseField):
     def get_avro_type(self):
-        return schema_generator.SchemaGenerator(self.type).avro_schema_to_python()
+        if self.type == typing.Any:
+            primitive_types = [PYTHON_TYPE_TO_AVRO[python_type]
+                               for python_type in PRIMITIVE_AND_LOGICAL_TYPES]
+            return OrderedDict(
+                __rec_avro_schema__=True,
+                type='record',
+                # using a named record is the only way to make a
+                # recursive structure in avro, so a nested map becomes {'_': {}}
+                # nested list becomes {'_': []}
+                # because it is an avro record, the storage is efficient
+                name='rec_object',
+                fields=[OrderedDict(
+                    name='_',
+                    type=[
+                        OrderedDict(type='map', values=primitive_types + ['rec_object']),
+                        OrderedDict(type='array', items=primitive_types + ['rec_object'])
+                    ]
+                )]
+            )
+        else:
+            return schema_generator.SchemaGenerator(self.type).avro_schema_to_python()
 
 
 INMUTABLE_FIELDS_CLASSES = {
@@ -677,6 +717,10 @@ def field_factory(
     elif native_type in PYTHON_LOGICAL_TYPES:
         klass = LOGICAL_TYPES_FIELDS_CLASSES[native_type]
         return klass(name=name, type=native_type, default=default, metadata=metadata)
+    elif isinstance(native_type, type) and issubclass(native_type, enum.Enum):
+        return EnumField(
+            name=name, type=native_type, default=default, metadata=metadata
+        )
     else:
         return RecordField(
             name=name, type=native_type, default=default, metadata=metadata
