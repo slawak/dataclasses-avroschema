@@ -96,6 +96,45 @@ def get_schemaless_pathes(schema: typing.Mapping[K, V]) -> typing.List[typing.Li
     return [schema_path_to_object_path(schema, path) for path in get_schemaless_schema_pathes(schema)]
 
 
+def get_schemaless_records(record, schemaless_pathes):
+    schemaless_records = []
+    for path in schemaless_pathes:
+        records = [(record, None)]
+        for path_element in path:            
+            new_records = []
+            for o,_ in records:
+                if path_element == '[*]':
+                    if isinstance(o, typing.Mapping):
+                        for k, v in o.items():
+                            if v:
+                                new_records.append(
+                                    (
+                                        v,
+                                        (lambda o, k: lambda x: o.__setitem__(k, x))(o,k)
+                                    ))
+                    if isinstance(o, typing.Iterable):
+                        for idx, i in enumerate(o):
+                            if i:
+                                new_records.append(
+                                    (
+                                        i,
+                                        (lambda o, k: lambda x: o.__setitem__(k, x))(o, idx)
+                                    ))
+                else:
+                    if isinstance(o, typing.Mapping):
+                        if path_element in o and o[path_element]:
+                            new_records.append(
+                                (
+                                    o[path_element],
+                                    (lambda o, k: lambda x: o.__setitem__(k, x))(o, path_element)
+                                ))
+                    else:
+                        raise NotImplementedError("Access to list elements not implemented")
+            records = new_records
+        schemaless_records = schemaless_records + records
+    return schemaless_records
+
+
 def get_schemaless_avro_schema(namespace=None):
     """
     Generates an avro schema (as python object) suitable for storing arbitrary
@@ -133,7 +172,7 @@ def get_schemaless_avro_schema(namespace=None):
     return schema
 
 
-def to_schemaless_avro_destructive(o, types_to_str=()):
+def to_schemaless_avro_destructive(o, schema_gen=None, schemaless_pathes=[], types_to_str=()):
     """
     Converts a python nested data structure and returns a data structure
     in schemaless_avro format. The input data structure is destroyed and reused.
@@ -152,6 +191,15 @@ def to_schemaless_avro_destructive(o, types_to_str=()):
         Note that this is irreversible, i.e. they will be read back as strings.
     :return: python data structure in schemaless_avro format
     """
+    if schema_gen:
+       schemaless_pathes = schema_gen.get_schemaless_pathes()
+    if schemaless_pathes:
+        for record_with_setter in get_schemaless_records(o, schemaless_pathes):
+            record = record_with_setter[0]
+            setter = record_with_setter[1]
+            record = to_schemaless_avro_destructive(record)
+            setter(record) # pylint: disable=E1102
+        return o
 
     if isinstance(o, str):
         return o
@@ -181,7 +229,7 @@ def to_schemaless_avro_destructive(o, types_to_str=()):
     return o
 
 
-def from_schemaless_avro_destructive(o):
+def from_schemaless_avro_destructive(o, schema_gen=None, schemaless_pathes=[]):
     """
     Converts a nested data structure in schemaless_avro format into a python nested
     data structure. The input data structure is destroyed and reused.
@@ -195,6 +243,16 @@ def from_schemaless_avro_destructive(o):
     :param o: data structure in schemaless_avro format.
     :return: plain python data structure
     """
+    if schema_gen:
+       schemaless_pathes = schema_gen.get_schemaless_pathes()
+    if schemaless_pathes:
+        for record_with_setter in get_schemaless_records(o, schemaless_pathes):
+            record = record_with_setter[0]
+            setter = record_with_setter[1]
+            record = from_schemaless_avro_destructive(record)
+            setter(record) # pylint: disable=E1102
+        return o
+
     if isinstance(o, str):
         return o
 

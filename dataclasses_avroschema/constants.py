@@ -40,7 +40,7 @@ PYTHON_TYPE_TO_AVRO = {
     dict: {"type": MAP},
     types.Fixed: {"type": FIXED},
     datetime.date: {"type": INT, "logicalType": DATE},
-    datetime.time: {"type": INT, "logicalType": TIME_MICROS},
+    datetime.time: {"type": LONG, "logicalType": TIME_MICROS},
     datetime.datetime: {"type": LONG, "logicalType": TIMESTAMP_MICROS},
     uuid.uuid4: {"type": STRING, "logicalType": UUID},
 }
