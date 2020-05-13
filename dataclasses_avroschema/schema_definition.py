@@ -55,7 +55,7 @@ class AvroSchemaDefinition(BaseSchemaDefinition):
     aliases: typing.List[str] = None
     namespace: str = None
     fields: typing.List["fields.FieldType"] = None
-    include_schema_doc: bool = True
+    include_schema_doc: bool = False
 
     def __post_init__(self):
         self.generate_extra_avro_attributes()

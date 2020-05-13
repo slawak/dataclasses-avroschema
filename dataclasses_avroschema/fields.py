@@ -13,57 +13,47 @@ import inflect
 
 from dataclasses_avroschema import schema_generator, types, utils
 
+from .constants import (
+    BOOLEAN,
+    NULL,
+    INT,
+    FLOAT,
+    DOUBLE,
+    LONG,
+    BYTES,
+    STRING,
+    ARRAY,
+    ENUM,
+    MAP,
+    FIXED,
+    DATE,
+    TIME_MILLIS,
+    TIMESTAMP_MILLIS,
+    TIME_MICROS,
+    TIMESTAMP_MICROS,
+    UUID,
+    LOGICAL_DATE,
+    LOGICAL_TIME,
+    LOGICAL_DATETIME,
+    LOGICAL_UUID,
+
+    PYTHON_TYPE_TO_AVRO,
+    PYTHON_INMUTABLE_TYPES,
+    PYTHON_PRIMITIVE_CONTAINERS,
+    PYTHON_LOGICAL_TYPES,
+    PYTHON_PRIMITIVE_TYPES,
+    PRIMITIVE_AND_LOGICAL_TYPES,
+
+    PythonPrimitiveTypes,
+)
+
+from .schemaless_avro_codec import (
+    SCHEMALESS_AVRO_SCHEMA,
+    SCHEMALESS_AVRO_SCHEMA_NAME,
+    get_schemaless_avro_schema,
+)
+
 p = inflect.engine()
-
-BOOLEAN = "boolean"
-NULL = "null"
-INT = "int"
-FLOAT = "float"
-LONG = "long"
-BYTES = "bytes"
-STRING = "string"
-ARRAY = "array"
-ENUM = "enum"
-MAP = "map"
-FIXED = "fixed"
-DATE = "date"
-TIME_MILLIS = "time-millis"
-TIMESTAMP_MILLIS = "timestamp-millis"
-UUID = "uuid"
-LOGICAL_DATE = {"type": INT, "logicalType": DATE}
-LOGICAL_TIME = {"type": INT, "logicalType": TIME_MILLIS}
-LOGICAL_DATETIME = {"type": LONG, "logicalType": TIMESTAMP_MILLIS}
-LOGICAL_UUID = {"type": STRING, "logicalType": UUID}
-
-PYTHON_TYPE_TO_AVRO = {
-    bool: BOOLEAN,
-    type(None): NULL,
-    int: INT,
-    float: FLOAT,
-    bytes: BYTES,
-    str: STRING,
-    list: {"type": ARRAY},
-    tuple: {"type": ENUM},
-    dict: {"type": MAP},
-    types.Fixed: {"type": FIXED},
-    datetime.date: {"type": INT, "logicalType": DATE},
-    datetime.time: {"type": INT, "logicalType": TIME_MILLIS},
-    datetime.datetime: {"type": LONG, "logicalType": TIMESTAMP_MILLIS},
-    uuid.uuid4: {"type": STRING, "logicalType": UUID},
-}
-
-# excluding tuple because is a container
-PYTHON_INMUTABLE_TYPES = (str, int, bool, float, bytes, type(None))
-
-PYTHON_PRIMITIVE_CONTAINERS = (list, tuple, dict)
-
-PYTHON_LOGICAL_TYPES = (datetime.date, datetime.time, datetime.datetime, uuid.uuid4)
-
-PYTHON_PRIMITIVE_TYPES = PYTHON_INMUTABLE_TYPES + PYTHON_PRIMITIVE_CONTAINERS
-
-PRIMITIVE_AND_LOGICAL_TYPES = PYTHON_INMUTABLE_TYPES + PYTHON_LOGICAL_TYPES
-
-PythonPrimitiveTypes = typing.Union[str, int, bool, float, list, tuple, dict]
 
 
 @dataclasses.dataclass
@@ -119,9 +109,14 @@ class BaseField:
                 * tuple, he OrderedDict will contains the key symbols inside type
                 * dict, he OrderedDict will contains the key values inside type
         """
-        template = OrderedDict(
-            [("name", self.name), ("type", self.get_avro_type())] + self.get_metadata()
-        )
+        if self.name:
+            template = OrderedDict(
+                [("name", self.name), ("type", self.get_avro_type())] + self.get_metadata()
+            )
+        else:
+            template = OrderedDict(
+                [("type", self.get_avro_type())] + self.get_metadata()
+            )
 
         default = self.get_default_value()
         if default is not None:
@@ -186,6 +181,11 @@ class FloatField(InmutableField):
 
 
 @dataclasses.dataclass
+class DoubleField(InmutableField):
+    avro_type: typing.ClassVar = DOUBLE
+
+
+@dataclasses.dataclass
 class BytesField(InmutableField):
     avro_type: typing.ClassVar = BYTES
 
@@ -199,7 +199,8 @@ class NoneField(InmutableField):
 class ContainerField(BaseField):
     def get_avro_type(self) -> PythonPrimitiveTypes:
         avro_type = self.avro_type
-        avro_type["name"] = self.get_singular_name(self.name)
+        if self.name:
+            avro_type["name"] = self.get_singular_name(self.name)
 
         return avro_type
 
@@ -250,11 +251,21 @@ class ListField(ContainerField):
     default_factory: typing.Any = None
 
     def __post_init__(self):
-        self.generate_items_type()
+        if self.type.__args__[0] == typing.Any:
+            self.name = SCHEMALESS_AVRO_SCHEMA_NAME
+        else:
+            self.generate_items_type()
 
     @property
     def avro_type(self) -> typing.Dict:
-        return {"type": ARRAY, "items": self.items_type}
+        if self.type.__args__[0] == typing.Any:
+            return get_schemaless_avro_schema()
+        else:
+            if self.items_type.get(SCHEMALESS_AVRO_SCHEMA, False):
+                self.name = SCHEMALESS_AVRO_SCHEMA_NAME
+                return get_schemaless_avro_schema()
+            else:
+                return {"type": ARRAY, "items": self.items_type}
 
     def get_default_value(self):
         if self.default is not dataclasses.MISSING:
@@ -293,8 +304,8 @@ class ListField(ContainerField):
                 default_factory=self.default_factory,
             )
         else:
-            items_type = Field(name=str(items_type), native_type=items_type).render()
-            del items_type['name']
+            items_type_field = Field(name=None, native_type=items_type).render()
+            items_type = items_type_field["type"]
             self.items_type = items_type
 
 
@@ -304,11 +315,17 @@ class DictField(ContainerField):
     values_type: typing.Any = None
 
     def __post_init__(self):
-        self.generate_values_type()
+        if self.type.__args__[1] == typing.Any:
+            self.name = SCHEMALESS_AVRO_SCHEMA_NAME
+        else:
+            self.generate_values_type()
 
     @property
     def avro_type(self) -> typing.Dict:
-        return {"type": MAP, "values": self.values_type}
+        if self.type.__args__[1] == typing.Any:
+            return get_schemaless_avro_schema()
+        else:
+            return {"type": MAP, "values": self.values_type}
 
     def get_default_value(self):
         if self.default is not dataclasses.MISSING:
@@ -344,8 +361,8 @@ class DictField(ContainerField):
             # Checking for a self reference. Maybe is a typing.ForwardRef
             self.values_type = self._get_self_reference_type(values_type)
         else:
-            values_type = Field(name=str(values_type), native_type=values_type).render()
-            del values_type['name']
+            values_type_field = Field(name=None, native_type=values_type).render()
+            values_type = values_type_field["type"]
             self.values_type = values_type
 
 
@@ -384,11 +401,16 @@ class UnionField(BaseField):
                 klass = PRIMITIVE_LOGICAL_TYPES_FIELDS_CLASSES[element]
                 union_element = klass.avro_type
             else:
-                union_element = Field(name=str(element), native_type=element).render()
-                del union_element['name']
+                union_element_field = Field(name=None, native_type=element).render()
+                union_element = union_element_field['type']
             unions.append(union_element)
 
         if default is None and default_factory is dataclasses.MISSING:
+            # move NULL to first position
+            try:
+                unions.remove(NULL)
+            except ValueError:
+                pass
             unions.insert(0, NULL)
 
         return unions
@@ -485,15 +507,15 @@ class DateField(LogicalTypeField):
 @dataclasses.dataclass
 class TimeField(LogicalTypeField):
     """
-    The time-millis logical type represents a time of day,
+    The time-micros logical type represents a time of day,
     with no reference to a particular calendar,
-    time zone or date, with a precision of one millisecond.
+    time zone or date, with a precision of one microsecond.
 
-    A time-millis logical type annotates an Avro int,
-    where the int stores the number of milliseconds after midnight, 00:00:00.000.
+    A time-micros logical type annotates an Avro int,
+    where the int stores the number of microseconds after midnight, 00:00:00.000000.
     """
 
-    avro_type: typing.ClassVar = {"type": INT, "logicalType": TIME_MILLIS}
+    avro_type: typing.ClassVar = {"type": LONG, "logicalType": TIME_MICROS}
 
     def get_default_value(self):
         if self.default is not dataclasses.MISSING:
@@ -506,7 +528,7 @@ class TimeField(LogicalTypeField):
     @staticmethod
     def to_logical_type(time):
         """
-        Returns the number of milliseconds after midnight, 00:00:00.000
+        Returns the number of microseconds after midnight, 00:00:00.000
         for a given time object
 
         Arguments:
@@ -523,22 +545,22 @@ class TimeField(LogicalTypeField):
         )
 
         return int(
-            (((hour * 60 + minutes) * 60 + seconds) * 1000) + (microseconds / 1000)
+            (((hour * 60 + minutes) * 60 + seconds) * 1000 * 1000) + (microseconds)
         )
 
 
 @dataclasses.dataclass
 class DatetimeField(LogicalTypeField):
     """
-    The timestamp-millis logical type represents an instant on the global timeline,
-    independent of a particular time zone or calendar, with a precision of one millisecond.
+    The timestamp-micros logical type represents an instant on the global timeline,
+    independent of a particular time zone or calendar, with a precision of one microsecond.
 
-    A timestamp-millis logical type annotates an Avro long,
-    where the long stores the number of milliseconds from the unix epoch,
+    A timestamp-micros logical type annotates an Avro long,
+    where the long stores the number of microseconds from the unix epoch,
     1 January 1970 00:00:00.000 UTC.
     """
 
-    avro_type: typing.ClassVar = {"type": LONG, "logicalType": TIMESTAMP_MILLIS}
+    avro_type: typing.ClassVar = {"type": LONG, "logicalType": TIMESTAMP_MICROS}
 
     def get_default_value(self):
         if self.default is not dataclasses.MISSING:
@@ -551,7 +573,7 @@ class DatetimeField(LogicalTypeField):
     @staticmethod
     def to_logical_type(date_time):
         """
-        Returns the number of milliseconds from the unix epoch,
+        Returns the number of microseconds from the unix epoch,
         1 January 1970 00:00:00.000 UTC for a given datetime
 
         Arguments:
@@ -561,7 +583,7 @@ class DatetimeField(LogicalTypeField):
             float
         """
         ts = (date_time - datetime.datetime(1970, 1, 1)).total_seconds()
-        return ts * 1000
+        return ts * 10**6
 
 
 @dataclasses.dataclass
@@ -591,24 +613,7 @@ class UUIDField(LogicalTypeField):
 class RecordField(BaseField):
     def get_avro_type(self):
         if self.type == typing.Any:
-            primitive_types = [PYTHON_TYPE_TO_AVRO[python_type]
-                               for python_type in PRIMITIVE_AND_LOGICAL_TYPES]
-            return OrderedDict(
-                __rec_avro_schema__=True,
-                type='record',
-                # using a named record is the only way to make a
-                # recursive structure in avro, so a nested map becomes {'_': {}}
-                # nested list becomes {'_': []}
-                # because it is an avro record, the storage is efficient
-                name='rec_object',
-                fields=[OrderedDict(
-                    name='_',
-                    type=[
-                        OrderedDict(type='map', values=primitive_types + ['rec_object']),
-                        OrderedDict(type='array', items=primitive_types + ['rec_object'])
-                    ]
-                )]
-            )
+            return get_schemaless_avro_schema()
         else:
             return schema_generator.SchemaGenerator(self.type).avro_schema_to_python()
 
@@ -616,7 +621,7 @@ class RecordField(BaseField):
 INMUTABLE_FIELDS_CLASSES = {
     bool: BooleanField,
     int: IntegerField,
-    float: FloatField,
+    float: DoubleField,
     bytes: BytesField,
     str: StringField,
     type(None): NoneField,
