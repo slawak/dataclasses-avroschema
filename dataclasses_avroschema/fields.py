@@ -630,6 +630,7 @@ INMUTABLE_FIELDS_CLASSES = {
 CONTAINER_FIELDS_CLASSES = {
     tuple: TupleField,
     list: ListField,
+    set: ListField,
     collections.abc.Sequence: ListField,
     collections.abc.MutableSequence: ListField,
     dict: DictField,
@@ -699,6 +700,7 @@ def field_factory(
             tuple,
             list,
             dict,
+            set,
             typing.Union,
             collections.abc.Sequence,
             collections.abc.MutableSequence,
