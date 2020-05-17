@@ -100,9 +100,9 @@ def get_schemaless_records(record, schemaless_pathes):
     schemaless_records = []
     for path in schemaless_pathes:
         records = [(record, None)]
-        for path_element in path:            
+        for path_element in path:
             new_records = []
-            for o,_ in records:
+            for o, _ in records:
                 if path_element == '[*]':
                     if isinstance(o, typing.Mapping):
                         for k, v in o.items():
@@ -110,7 +110,7 @@ def get_schemaless_records(record, schemaless_pathes):
                                 new_records.append(
                                     (
                                         v,
-                                        (lambda o, k: lambda x: o.__setitem__(k, x))(o,k)
+                                        (lambda o, k: lambda x: o.__setitem__(k, x))(o, k)
                                     ))
                     if isinstance(o, typing.Iterable):
                         for idx, i in enumerate(o):
@@ -172,7 +172,7 @@ def get_schemaless_avro_schema(namespace=None):
     return schema
 
 
-def to_schemaless_avro_destructive(o, schema_gen=None, schemaless_pathes=[], types_to_str=()):
+def to_schemaless_avro_destructive(o, schema_gen=None, schemaless_pathes=[], types_to_str=(), recurse=False):
     """
     Converts a python nested data structure and returns a data structure
     in schemaless_avro format. The input data structure is destroyed and reused.
@@ -192,13 +192,15 @@ def to_schemaless_avro_destructive(o, schema_gen=None, schemaless_pathes=[], typ
     :return: python data structure in schemaless_avro format
     """
     if schema_gen:
-       schemaless_pathes = schema_gen.get_schemaless_pathes()
+        schemaless_pathes = schema_gen.get_schemaless_pathes()
     if schemaless_pathes:
         for record_with_setter in get_schemaless_records(o, schemaless_pathes):
             record = record_with_setter[0]
             setter = record_with_setter[1]
-            record = to_schemaless_avro_destructive(record)
-            setter(record) # pylint: disable=E1102
+            record = to_schemaless_avro_destructive(record, recurse=True)
+            setter(record)  # pylint: disable=E1102
+        return o
+    if not recurse:
         return o
 
     if isinstance(o, str):
@@ -210,26 +212,26 @@ def to_schemaless_avro_destructive(o, schema_gen=None, schemaless_pathes=[], typ
     if isinstance(o, Mapping):
         if isinstance(o, MutableMapping):
             for k, v in o.items():
-                o[k] = to_schemaless_avro_destructive(v, types_to_str)
+                o[k] = to_schemaless_avro_destructive(v, types_to_str, recurse=recurse)
             return {'_': o}
         else:
             return {'_': {
-                k: to_schemaless_avro_destructive(v, types_to_str)
+                k: to_schemaless_avro_destructive(v, types_to_str, recurse=recurse)
                 for k, v in o.items()}
             }
 
     if isinstance(o, Iterable):
         if isinstance(o, MutableSequence):
             for i in range(len(o)):
-                o[i] = to_schemaless_avro_destructive(o[i], types_to_str)
+                o[i] = to_schemaless_avro_destructive(o[i], types_to_str, recurse=recurse)
             return {'_': o}
         else:
-            return {'_': [to_schemaless_avro_destructive(i, types_to_str) for i in o]}
+            return {'_': [to_schemaless_avro_destructive(i, types_to_str, recurse=recurse) for i in o]}
 
     return o
 
 
-def from_schemaless_avro_destructive(o, schema_gen=None, schemaless_pathes=[]):
+def from_schemaless_avro_destructive(o, schema_gen=None, schemaless_pathes=[], recurse=False):
     """
     Converts a nested data structure in schemaless_avro format into a python nested
     data structure. The input data structure is destroyed and reused.
@@ -244,13 +246,15 @@ def from_schemaless_avro_destructive(o, schema_gen=None, schemaless_pathes=[]):
     :return: plain python data structure
     """
     if schema_gen:
-       schemaless_pathes = schema_gen.get_schemaless_pathes()
+        schemaless_pathes = schema_gen.get_schemaless_pathes()
     if schemaless_pathes:
         for record_with_setter in get_schemaless_records(o, schemaless_pathes):
             record = record_with_setter[0]
             setter = record_with_setter[1]
-            record = from_schemaless_avro_destructive(record)
-            setter(record) # pylint: disable=E1102
+            record = from_schemaless_avro_destructive(record, recurse=True)
+            setter(record)  # pylint: disable=E1102
+        return o
+    if not recurse:
         return o
 
     if isinstance(o, str):
@@ -261,17 +265,17 @@ def from_schemaless_avro_destructive(o, schema_gen=None, schemaless_pathes=[]):
         if isinstance(o, Mapping):
             if isinstance(o, MutableMapping):
                 for k, v in o.items():
-                    o[k] = from_schemaless_avro_destructive(v)
+                    o[k] = from_schemaless_avro_destructive(v, recurse=recurse)
                 return o
             else:
-                return {k: from_schemaless_avro_destructive(v) for k, v in o.items()}
+                return {k: from_schemaless_avro_destructive(v, recurse=recurse) for k, v in o.items()}
         if isinstance(o, Iterable):
             if isinstance(o, MutableSequence):
                 for i in range(len(o)):
-                    o[i] = from_schemaless_avro_destructive(o[i])
+                    o[i] = from_schemaless_avro_destructive(o[i], recurse=recurse)
                 return o
             else:
-                return [from_schemaless_avro_destructive(i) for i in o]
+                return [from_schemaless_avro_destructive(i, recurse=recurse) for i in o]
 
         raise Exception('schemaless_object {"_": val} val must be Mapping or Iterable')
 
