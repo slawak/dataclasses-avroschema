@@ -400,8 +400,12 @@ class UnionField(BaseField):
             if element in PRIMITIVE_AND_LOGICAL_TYPES:
                 klass = PRIMITIVE_LOGICAL_TYPES_FIELDS_CLASSES[element]
                 union_element = klass.avro_type
-            else:
+            elif isinstance(element, typing._GenericAlias):
                 union_element_field = Field(name=None, native_type=element).render()
+                union_element = union_element_field['type']
+            else:
+                union_element_field = Field(
+                    name=element.__name__, native_type=element).render()
                 union_element = union_element_field['type']
             unions.append(union_element)
 
