@@ -119,7 +119,7 @@ class BaseField:
             )
 
         default = self.get_default_value()
-        if default is not None:
+        if self.default is not dataclasses.MISSING:
             template["default"] = default
 
         return template
@@ -127,7 +127,7 @@ class BaseField:
     def get_default_value(self):
         if self.default is not dataclasses.MISSING:
             if self.default is None:
-                return NULL
+                return None
 
             if self.validate_default():
                 return self.default
@@ -153,9 +153,9 @@ class InmutableField(BaseField):
     def get_avro_type(self) -> PythonPrimitiveTypes:
         if self.default is not dataclasses.MISSING:
             if self.default is not None:
-                return [self.avro_type, NULL]
+                return [self.avro_type, None]
             # means that default value is None
-            return [NULL, self.avro_type]
+            return [None, self.avro_type]
 
         return self.avro_type
 
@@ -422,7 +422,7 @@ class UnionField(BaseField):
     def get_default_value(self):
         if self.default is not dataclasses.MISSING:
             if self.default is None:
-                return NULL
+                return None
         elif self.default_factory not in (dataclasses.MISSING, None):
             # expeting a callable
             default = self.default_factory()
@@ -483,7 +483,7 @@ class DateField(LogicalTypeField):
     def get_default_value(self):
         if self.default is not dataclasses.MISSING:
             if self.default is None:
-                return NULL
+                return None
 
             if self.validate_default():
                 # Convert to datetime and get the amount of days
@@ -524,7 +524,7 @@ class TimeField(LogicalTypeField):
     def get_default_value(self):
         if self.default is not dataclasses.MISSING:
             if self.default is None:
-                return NULL
+                return None
 
             if self.validate_default():
                 return self.to_logical_type(self.default)
@@ -569,7 +569,7 @@ class DatetimeField(LogicalTypeField):
     def get_default_value(self):
         if self.default is not dataclasses.MISSING:
             if self.default is None:
-                return NULL
+                return None
 
             if self.validate_default():
                 return self.to_logical_type(self.default)
@@ -597,7 +597,7 @@ class UUIDField(LogicalTypeField):
     def get_default_value(self):
         if self.default is not dataclasses.MISSING:
             if self.default is None:
-                return NULL
+                return None
 
             if self.validate_default():
                 return self.to_logical_type(self.default)
