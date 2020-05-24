@@ -51,181 +51,159 @@ class SchemaGenerator:
     def get_schemaless_pathes(self) -> typing.List[typing.List[str]]:
         return get_schemaless_pathes(self.generate_schema(schema_type="avro"))
 
-    def avro_schema(self, flat: bool = False, faust_field: bool = False) -> str:
+    def avro_schema(self, canonical: bool = False, faust_field: bool = False) -> str:
         schema = copy.deepcopy(self.generate_schema(schema_type="avro"))
-        if flat:
-            # a simple addition of a __faust field to all records to contain faust model metadata
+        if canonical:
             if faust_field:
-                faust_record = {
-                    "type": "record",
-                    "name": "__faust",
-                    "fields": [
-                            {
-                                "name": "ns",
-                                "type": "string"
-                            }
-                    ],
-                    "doc": "Faust meta data"
-                }
-                namespace = schema.get("namespace")
-                if namespace:
-                    faust_record = {**faust_record, ** {
-                        "namespace": namespace
-                    }}
-                    namespace += "."
-                else:
-                    namespace = ""
-                add_fields = [{
-                    "name": "__faust",
-                    "type": namespace + "__faust"
-                }]
+                # a simple addition of a __faust field to all records to contain faust model metadata
+                schema = _schema_visitor(schema,
+                                         previsit_func=_default_previsit_func,
+                                         postvisit_func=_faust_postvisit_func,
+                                         )
             else:
-                add_fields = None
-            schemas = [schema]
-            flat_schemas = collections.OrderedDict()
-            schemas_to_process = collections.OrderedDict()
-            _flatten_schemas(schemas, flat_schemas, None, schemas_to_process)
-            schemas = list(flat_schemas.values())
-            if faust_field:
-                for record in schemas:
-                    if "fields" in record:
-                        record["fields"] += add_fields
-                schemas = [faust_record] + schemas
-            return json.dumps(schemas)
-        else:
-            return json.dumps(schema)
+                schema = _schema_visitor(schema,
+                                         previsit_func=_default_previsit_func,
+                                         postvisit_func=_default_postvisit_func,
+                                         )
+        return json.dumps(schema)
 
-    def avro_schema_to_python(self, flat: bool = False, faust_field: bool = False) -> typing.Dict[str, typing.Any]:
-        return json.loads(self.avro_schema(flat, faust_field))
+    def avro_schema_to_python(self, canonical: bool = False, faust_field: bool = False) -> typing.Mapping[str, typing.Any]:
+        return json.loads(self.avro_schema(canonical=canonical, faust_field=faust_field))
 
 
-# following functions are a very crude way to traverse a list of schemas
-# and flatten them by replacing nested schemas with references
-# this resulting list of schemas can then be used with fastavro
-# without the issue of redifinition of a schema
+def _default_previsit_func(
+    schema: typing.Mapping[str, typing.Any],
+    schema_key: typing.Tuple[str, str],
+    visited_schemas: typing.Mapping[typing.Tuple[str, str], typing.Mapping[str, typing.Any]],
+) -> typing.Tuple[bool, typing.Union[typing.Mapping[str, typing.Any], str]]:
+    _, schema_name = schema_key
+    if schema_key in visited_schemas:
+        return True, schema_name
+    return False, schema
 
 
-def _process_schema_single(
-    schema: typing.Dict[str, typing.Any],
-    flat_schemas: typing.Dict[typing.Tuple[str], typing.Any],
-    namespace: str = None,
-    schemas_to_process: typing.Dict[typing.Tuple[str], typing.Any] = {},
-):
-    schema_name = schema.get("name", None)
-    schema_ns = schema.get("namespace", namespace)
-    schema_key = (schema_ns, schema_name)
+def _default_postvisit_func(
+    schema: typing.Mapping[str, typing.Any],
+    schema_key: typing.Tuple[str, str],
+    visited_schemas: typing.Mapping[typing.Tuple[str, str], typing.Mapping[str, typing.Any]],
+) -> typing.Mapping[str, typing.Any]:
+    _, schema_name = schema_key
     schema_type = schema.get("type", None)
     if schema_name and schema_type in ('record', 'enum'):
-        if schema_key in flat_schemas:
-            # maybe check equality
-            return schema_name
-        if not schema_key in schemas_to_process:
-            schemas_to_process[schema_key] = schema
-        else:
-            # maybe check equality
-            pass
-    _flatten_schema(
-        schema,
-        flat_schemas,
-        namespace,
-        schemas_to_process)
-    if schema_name and schema_type in ('record', 'enum'):
-        return schema_name
+        visited_schemas[schema_key] = schema
+    return schema
+
+
+def _faust_postvisit_func(
+    schema: typing.Mapping[str, typing.Any],
+    schema_key: typing.Tuple[str, str],
+    visited_schemas: typing.Mapping[typing.Tuple[str, str], typing.Mapping[str, typing.Any]],
+) -> typing.Mapping[str, typing.Any]:
+    namespace, schema_name = schema_key
+    schema_type = schema.get("type", None)
+    faust_record = {
+        "type": "record",
+        "name": "__faust",
+        "fields": [
+            {
+                "name": "ns",
+                "type": "string"
+            }
+        ],
+        "doc": "Faust meta data"
+    }
+    if namespace:
+        faust_namespace = namespace
+        faust_record = {**faust_record, ** {
+            "namespace": faust_namespace
+        }}
+        faust_namespace += "."
     else:
+        faust_namespace = ""
+    if "fields" in schema:
+        faust_schema_key = (faust_namespace, "__faust")
+        if faust_schema_key in visited_schemas:
+            additional_field = [{
+                "name": "__faust",
+                "type": faust_namespace + "__faust"
+            }]
+        else:
+            visited_schemas[faust_schema_key] = faust_record
+            additional_field = [{
+                "name": "__faust",
+                "type": faust_record
+            }]
+        schema["fields"] += additional_field
+    if schema_name and schema_type in ('record', 'enum'):
+        visited_schemas[schema_key] = schema
+    return schema
+
+
+def _schema_visitor(
+    schema: typing.Union[typing.Mapping[str, typing.Any], str],
+    previsit_func: typing.Callable[
+        [
+            typing.Mapping[str, typing.Any],
+            typing.Tuple[str, str],
+            typing.Mapping[typing.Tuple[str, str], typing.Mapping[str, typing.Any]]
+        ],
+        typing.Tuple[bool, typing.Union[typing.Mapping[str, typing.Any], str]]] = _default_previsit_func,
+    namespace: str = None,
+    postvisit_func: typing.Callable[
+        [
+            typing.Mapping[str, typing.Any],
+            typing.Tuple[str, str],
+            typing.Mapping[typing.Tuple[str, str], typing.Mapping[str, typing.Any]]
+        ],
+        typing.Mapping[str, typing.Any]] = _default_postvisit_func,
+    visited_schemas: typing.Mapping[typing.Tuple[str, str], typing.Mapping[str, typing.Any]] = {},
+
+):
+    if not isinstance(schema, typing.Mapping):
         return schema
-
-
-def _process_schema(
-    idx: int,
-    schemas: typing.List[typing.Dict[str, typing.Any]],
-    flat_schemas: typing.Dict[typing.Tuple[str], typing.Any],
-    namespace: str = None,
-    schemas_to_process: typing.Dict[typing.Tuple[str], typing.Any] = {},
-):
-    schemas[idx] = _process_schema_single(
-        schemas[idx],
-        flat_schemas,
-        namespace,
-        schemas_to_process)
-
-
-def _flatten_schema(
-    schema: typing.Dict[str, typing.Any],
-    flat_schemas: typing.Dict[typing.Tuple[str], typing.Any],
-    namespace: str = None,
-    schemas_to_process: typing.Dict[typing.Tuple[str], typing.Any] = {}
-):
     schema_name = schema.get("name", None)
     namespace = schema.get("namespace", namespace)
     schema_key = (namespace, schema_name)
-    schema_type = schema.get("type", None)
-    if schema_name and schema_key in flat_schemas:
-        return True
+    visited, schema = previsit_func(schema, schema_key, visited_schemas)
+    if visited:
+        return schema
     if schema["type"] in ('record'):
         for field in schema.get("fields", []):
-            if isinstance(field["type"], dict):
+            if isinstance(field["type"], typing.Mapping):
                 field_schema = field["type"]
                 if field_schema["type"] in ('record', 'enum'):
-                    field["type"] = _process_schema_single(field_schema,
-                                                           flat_schemas, namespace, schemas_to_process)
+                    field["type"] = _schema_visitor(
+                        field_schema, previsit_func, namespace, postvisit_func, visited_schemas)
                 elif field_schema["type"] in ('array'):
-                    if isinstance(field_schema["items"], dict) and field_schema["items"]["type"] in ('record', 'enum'):
-                        field_schema["items"] = _process_schema_single(
-                            field_schema["items"],
-                            flat_schemas,
-                            namespace,
-                            schemas_to_process)
-                    if isinstance(field_schema["items"], list):
-                        _flatten_schemas(field_schema["items"],
-                                         flat_schemas, namespace, schemas_to_process)
+                    if isinstance(field_schema["items"], typing.Mapping) and field_schema["items"]["type"] in ('record', 'enum'):
+                        field_schema["items"] = _schema_visitor(
+                            field_schema["items"], previsit_func, namespace, postvisit_func, visited_schemas)
+                    if isinstance(field_schema["items"], typing.Sequence) and not isinstance(field_schema["items"], str):
+                        field_schema["items"] = [_schema_visitor(subschema, previsit_func, namespace, postvisit_func, visited_schemas)
+                                                 for subschema in field_schema["items"]]
                 elif field_schema["type"] in ('map'):
-                    if isinstance(field_schema["values"], dict) and field_schema["values"]["type"] in ('record', 'enum'):
-                        field_schema["values"] = _process_schema_single(
-                            field_schema["values"],
-                            flat_schemas,
-                            namespace,
-                            schemas_to_process)
-                    if isinstance(field_schema["values"], list):
-                        _flatten_schemas(field_schema["values"],
-                                         flat_schemas, namespace, schemas_to_process)
-            if isinstance(field["type"], list):
-                _flatten_schemas(field["type"],
-                                 flat_schemas, namespace, schemas_to_process)
+                    if isinstance(field_schema["values"], typing.Mapping) and field_schema["values"]["type"] in ('record', 'enum'):
+                        field_schema["values"] = _schema_visitor(
+                            field_schema["values"], previsit_func, namespace, postvisit_func, visited_schemas)
+                    if isinstance(field_schema["values"], typing.Sequence) and not isinstance(field_schema["values"], str):
+                        field_schema["values"] = [_schema_visitor(subschema, previsit_func, namespace, postvisit_func, visited_schemas)
+                                                  for subschema in field_schema["values"]]
+            if isinstance(field["type"], typing.Sequence) and not isinstance(field["type"], str):
+                field["type"] = [_schema_visitor(subschema, previsit_func, namespace, postvisit_func, visited_schemas)
+                                 for subschema in field["type"]]
     elif schema["type"] in ('array'):
-        if isinstance(schema["items"], dict) and schema["items"]["type"] in ('record', 'enum'):
-            schema["items"] = _process_schema_single(
-                schema["items"],
-                flat_schemas,
-                namespace,
-                schemas_to_process)
-            if isinstance(schema["items"], list):
-                _flatten_schemas(schema["items"],
-                                 flat_schemas, namespace, schemas_to_process)
+        if isinstance(schema["items"], typing.Mapping) and schema["items"]["type"] in ('record', 'enum'):
+            schema["items"] = _schema_visitor(
+                schema["items"], previsit_func, namespace, postvisit_func, visited_schemas)
+        if isinstance(schema["items"], typing.Sequence) and not isinstance(schema["items"], str):
+            schema["items"] = [_schema_visitor(subschema, previsit_func, namespace, postvisit_func, visited_schemas)
+                               for subschema in schema["items"]]
     elif schema["type"] in ('map'):
-        if isinstance(schema["values"], dict) and schema["values"]["type"] in ('record', 'enum'):
-            schema["values"] = _process_schema_single(
-                schema["values"],
-                flat_schemas,
-                namespace,
-                schemas_to_process)
-            if isinstance(schema["values"], list):
-                _flatten_schemas(schema["values"],
-                                 flat_schemas, namespace, schemas_to_process)
-    if schema_name and schema_type in ('record', 'enum'):
-        flat_schemas[schema_key] = schema
-        if schema_key in schemas_to_process:
-            del schemas_to_process[schema_key]
-    return True
-
-
-def _flatten_schemas(
-    schemas: typing.List[typing.Dict[str, typing.Any]],
-    flat_schemas: typing.Dict[typing.Tuple[str], typing.Any],
-    namespace: str = None,
-    schemas_to_process: typing.Dict[typing.Tuple[str], typing.Any] = {}
-):
-    for idx, schema in enumerate(copy.copy(schemas)):
-        if isinstance(schema, dict):
-            if schema["type"] in ('record', 'enum', 'array', 'map'):
-                _process_schema(idx, schemas,
-                                flat_schemas, namespace, schemas_to_process)
+        if isinstance(schema["values"], typing.Mapping) and schema["values"]["type"] in ('record', 'enum'):
+            schema["values"] = _schema_visitor(
+                schema["values"], previsit_func, namespace, postvisit_func, visited_schemas)
+        if isinstance(schema["values"], typing.Sequence) and not isinstance(schema["values"], str):
+            schema["values"] = [_schema_visitor(subschema, previsit_func, namespace, postvisit_func, visited_schemas)
+                                for subschema in schema["values"]]
+    schema = postvisit_func(schema, schema_key, visited_schemas)
+    return schema
