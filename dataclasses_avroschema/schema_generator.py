@@ -5,7 +5,7 @@ import collections
 import copy
 
 from dataclasses_avroschema.schema_definition import AvroSchemaDefinition
-from dataclasses_avroschema.schemaless_avro_codec import get_schemaless_pathes
+from dataclasses_avroschema.schemaless_avro_codec import get_schemaless_pathes, get_schemaless_avro_schema, SCHEMALESS_AVRO_SCHEMA
 
 
 class SchemaGenerator:
@@ -82,6 +82,8 @@ def _default_pre_visit_func(
     if schema_name in visited_schemas:
         namespace, _ = visited_schemas[schema_name]
         return True, namespace, (f'{namespace}.{schema_name}' if namespace else schema_name)
+    if schema.get(SCHEMALESS_AVRO_SCHEMA):
+        return False, namespace, get_schemaless_avro_schema(namespace)
     return False, namespace, schema
 
 
@@ -100,6 +102,8 @@ def _namespace_overriding_pre_visit_func(
     if schema_name in visited_schemas:
         namespace, _ = visited_schemas[schema_name]
         return True, namespace, (f'{namespace}.{schema_name}' if namespace else schema_name)
+    if schema.get(SCHEMALESS_AVRO_SCHEMA):
+        return False, namespace, get_schemaless_avro_schema(namespace)
     return False, namespace, schema
 
 

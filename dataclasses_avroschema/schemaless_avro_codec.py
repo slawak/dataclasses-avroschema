@@ -175,7 +175,7 @@ def copy_upto_schemaless_pathes(record, schemaless_pathes):
     return record
 
 
-def get_schemaless_avro_schema(namespace=None):
+def get_schemaless_avro_schema(namespace=None, limit_level=None, level=None):
     """
     Generates an avro schema (as python object) suitable for storing arbitrary
     python nested data structure.
@@ -190,25 +190,35 @@ def get_schemaless_avro_schema(namespace=None):
     :return: python representation of avro schema
     """
     primitive_types = [PYTHON_TYPE_TO_AVRO[python_type]
-                       for python_type in PRIMITIVE_AND_LOGICAL_TYPES]
+                       for python_type in PYTHON_INMUTABLE_TYPES]
+    if limit_level and not level:
+        level = 0
     schema = OrderedDict(
-        __schemaless_avro_schema__=True,
         type='record',
         # using a named record is the only way to make a
         # recursive structure in avro, so a nested map becomes {'_': {}}
         # nested list becomes {'_': []}
         # because it is an avro record, the storage is efficient
-        name=SCHEMALESS_AVRO_SCHEMA_NAME,
+        name=SCHEMALESS_AVRO_SCHEMA_NAME if not level else f'{SCHEMALESS_AVRO_SCHEMA_NAME}_{level}',
         fields=[OrderedDict(
             name='_',
             type=[
-                OrderedDict(type='map', values=primitive_types + [SCHEMALESS_AVRO_SCHEMA_NAME]),
-                OrderedDict(type='array', items=primitive_types + [SCHEMALESS_AVRO_SCHEMA_NAME])
+                OrderedDict(type='map', values=primitive_types + (
+                    [SCHEMALESS_AVRO_SCHEMA_NAME] if limit_level == None else (
+                        [get_schemaless_avro_schema(namespace, limit_level, level + 1)] if level < limit_level else []))),
+                OrderedDict(type='array', items=primitive_types + (
+                    [SCHEMALESS_AVRO_SCHEMA_NAME] if limit_level == None else (
+                        [get_schemaless_avro_schema(namespace, limit_level, level + 1)] if level < limit_level else[]))),
             ]
-        )]
+        )],
+        **({
+            SCHEMALESS_AVRO_SCHEMA: True,
+        } if not level else {})
     )
     if namespace:
         schema['namespace'] = namespace
+    if schema.get(SCHEMALESS_AVRO_SCHEMA):
+        schema = OrderedDict(**{**{SCHEMALESS_AVRO_SCHEMA: True}, **schema})
     return schema
 
 
