@@ -51,55 +51,80 @@ class SchemaGenerator:
     def get_schemaless_pathes(self) -> typing.List[typing.List[str]]:
         return get_schemaless_pathes(self.generate_schema(schema_type="avro"))
 
-    def avro_schema(self, canonical: bool = False, faust_field: bool = False) -> str:
+    def avro_schema(self, canonical: bool = False, faust_field: bool = False, namespace: str = None) -> str:
         schema = copy.deepcopy(self.generate_schema(schema_type="avro"))
         if canonical:
+            pre_visit_func = _default_pre_visit_func
+            post_visit_func = _default_post_visit_func
             if faust_field:
-                # a simple addition of a __faust field to all records to contain faust model metadata
-                schema = _schema_visitor(schema,
-                                         previsit_func=_default_previsit_func,
-                                         postvisit_func=_faust_postvisit_func,
-                                         )
-            else:
-                schema = _schema_visitor(schema,
-                                         previsit_func=_default_previsit_func,
-                                         postvisit_func=_default_postvisit_func,
-                                         )
+                post_visit_func = _faust_post_visit_func
+            if namespace:
+                pre_visit_func = _namespace_overriding_pre_visit_func
+            schema = _schema_visitor(schema, {},
+                                     namespace=namespace,
+                                     pre_visit_func=pre_visit_func,
+                                     post_visit_func=post_visit_func,
+                                     )
         return json.dumps(schema)
 
-    def avro_schema_to_python(self, canonical: bool = False, faust_field: bool = False) -> typing.Mapping[str, typing.Any]:
-        return json.loads(self.avro_schema(canonical=canonical, faust_field=faust_field))
+    def avro_schema_to_python(self, canonical: bool = False, faust_field: bool = False, namespace: str = None) -> typing.Mapping[str, typing.Any]:
+        return json.loads(self.avro_schema(canonical=canonical, faust_field=faust_field, namespace=namespace))
 
 
-def _default_previsit_func(
+def _default_pre_visit_func(
     schema: typing.Mapping[str, typing.Any],
-    schema_key: typing.Tuple[str, str],
+    namespace: str,
     visited_schemas: typing.Mapping[typing.Tuple[str, str], typing.Mapping[str, typing.Any]],
+    parent_type: str = None,
 ) -> typing.Tuple[bool, typing.Union[typing.Mapping[str, typing.Any], str]]:
-    _, schema_name = schema_key
-    if schema_key in visited_schemas:
-        return True, schema_name
-    return False, schema
+    schema_name = schema.get("name", None)
+    namespace = schema.get("namespace", namespace)
+    if schema_name in visited_schemas:
+        namespace, _ = visited_schemas[schema_name]
+        return True, namespace, (f'{namespace}.{schema_name}' if namespace else schema_name)
+    return False, namespace, schema
 
 
-def _default_postvisit_func(
+def _namespace_overriding_pre_visit_func(
     schema: typing.Mapping[str, typing.Any],
-    schema_key: typing.Tuple[str, str],
+    namespace: str,
     visited_schemas: typing.Mapping[typing.Tuple[str, str], typing.Mapping[str, typing.Any]],
-) -> typing.Mapping[str, typing.Any]:
-    _, schema_name = schema_key
+    parent_type: str = None,
+) -> typing.Tuple[bool, typing.Union[typing.Mapping[str, typing.Any], str]]:
+    schema_name = schema.get("name", None)
+    namespace = schema.get("namespace", namespace)
     schema_type = schema.get("type", None)
     if schema_name and schema_type in ('record', 'enum'):
-        visited_schemas[schema_key] = schema
+        namespace = f'{namespace}.{schema_name.lower()}'
+        schema['namespace'] = namespace
+    if schema_name in visited_schemas:
+        namespace, _ = visited_schemas[schema_name]
+        return True, namespace, (f'{namespace}.{schema_name}' if namespace else schema_name)
+    return False, namespace, schema
+
+
+def _default_post_visit_func(
+    schema: typing.Mapping[str, typing.Any],
+    namespace: str,
+    visited_schemas: typing.Mapping[typing.Tuple[str, str], typing.Mapping[str, typing.Any]],
+    parent_type: str = None,
+) -> typing.Mapping[str, typing.Any]:
+    schema_name = schema.get("name", None)
+    namespace = schema.get("namespace", namespace)
+    schema_type = schema.get("type", None)
+    if schema_name and schema_type in ('record', 'enum'):
+        visited_schemas[schema_name] = (namespace, schema)
     return schema
 
 
-def _faust_postvisit_func(
+def _faust_post_visit_func(
     schema: typing.Mapping[str, typing.Any],
-    schema_key: typing.Tuple[str, str],
+    namespace: str,
     visited_schemas: typing.Mapping[typing.Tuple[str, str], typing.Mapping[str, typing.Any]],
+    parent_type: str = None,
 ) -> typing.Mapping[str, typing.Any]:
-    namespace, schema_name = schema_key
+    schema_name = schema.get("name", None)
+    namespace = schema.get("namespace", namespace)
     schema_type = schema.get("type", None)
     faust_record = {
         "type": "record",
@@ -113,58 +138,55 @@ def _faust_postvisit_func(
         "doc": "Faust meta data"
     }
     if namespace:
-        faust_namespace = namespace
+        faust_namespace = f'{namespace}.{"__faust"}'
         faust_record = {**faust_record, ** {
             "namespace": faust_namespace
         }}
-        faust_namespace += "."
     else:
-        faust_namespace = ""
+        faust_namespace = None
     if "fields" in schema:
-        faust_schema_key = (faust_namespace, "__faust")
-        if faust_schema_key in visited_schemas:
+        if "__faust" in visited_schemas:
             additional_field = [{
                 "name": "__faust",
-                "type": faust_namespace + "__faust"
+                "type": faust_namespace + ".__faust"
             }]
         else:
-            visited_schemas[faust_schema_key] = faust_record
+            visited_schemas["__faust"] = (faust_namespace, faust_record)
             additional_field = [{
                 "name": "__faust",
                 "type": faust_record
             }]
         schema["fields"] += additional_field
     if schema_name and schema_type in ('record', 'enum'):
-        visited_schemas[schema_key] = schema
+        visited_schemas[schema_name] = (namespace, schema)
     return schema
 
 
 def _schema_visitor(
     schema: typing.Union[typing.Mapping[str, typing.Any], str],
-    previsit_func: typing.Callable[
-        [
-            typing.Mapping[str, typing.Any],
-            typing.Tuple[str, str],
-            typing.Mapping[typing.Tuple[str, str], typing.Mapping[str, typing.Any]]
-        ],
-        typing.Tuple[bool, typing.Union[typing.Mapping[str, typing.Any], str]]] = _default_previsit_func,
+    visited_schemas: typing.Mapping[typing.Tuple[str, str], typing.Mapping[str, typing.Any]],
     namespace: str = None,
-    postvisit_func: typing.Callable[
+    pre_visit_func: typing.Callable[
         [
             typing.Mapping[str, typing.Any],
             typing.Tuple[str, str],
-            typing.Mapping[typing.Tuple[str, str], typing.Mapping[str, typing.Any]]
+            typing.Mapping[typing.Tuple[str, str], typing.Mapping[str, typing.Any]],
+            str,
         ],
-        typing.Mapping[str, typing.Any]] = _default_postvisit_func,
-    visited_schemas: typing.Mapping[typing.Tuple[str, str], typing.Mapping[str, typing.Any]] = {},
-
+        typing.Tuple[bool, typing.Union[typing.Mapping[str, typing.Any], str]]] = _default_pre_visit_func,
+    post_visit_func: typing.Callable[
+        [
+            typing.Mapping[str, typing.Any],
+            typing.Tuple[str, str],
+            typing.Mapping[typing.Tuple[str, str], typing.Mapping[str, typing.Any]],
+            str,
+        ],
+        typing.Mapping[str, typing.Any]] = _default_post_visit_func,
+    parent_type: str = None,
 ):
     if not isinstance(schema, typing.Mapping):
         return schema
-    schema_name = schema.get("name", None)
-    namespace = schema.get("namespace", namespace)
-    schema_key = (namespace, schema_name)
-    visited, schema = previsit_func(schema, schema_key, visited_schemas)
+    visited, namespace, schema = pre_visit_func(schema, namespace, visited_schemas, parent_type)
     if visited:
         return schema
     if schema["type"] in ('record'):
@@ -173,37 +195,37 @@ def _schema_visitor(
                 field_schema = field["type"]
                 if field_schema["type"] in ('record', 'enum'):
                     field["type"] = _schema_visitor(
-                        field_schema, previsit_func, namespace, postvisit_func, visited_schemas)
+                        field_schema, visited_schemas, namespace, pre_visit_func, post_visit_func, "fields")
                 elif field_schema["type"] in ('array'):
                     if isinstance(field_schema["items"], typing.Mapping) and field_schema["items"]["type"] in ('record', 'enum'):
                         field_schema["items"] = _schema_visitor(
-                            field_schema["items"], previsit_func, namespace, postvisit_func, visited_schemas)
+                            field_schema["items"], visited_schemas, namespace, pre_visit_func, post_visit_func, "array")
                     if isinstance(field_schema["items"], typing.Sequence) and not isinstance(field_schema["items"], str):
-                        field_schema["items"] = [_schema_visitor(subschema, previsit_func, namespace, postvisit_func, visited_schemas)
+                        field_schema["items"] = [_schema_visitor(subschema, visited_schemas, namespace, pre_visit_func, post_visit_func, "array")
                                                  for subschema in field_schema["items"]]
                 elif field_schema["type"] in ('map'):
                     if isinstance(field_schema["values"], typing.Mapping) and field_schema["values"]["type"] in ('record', 'enum'):
                         field_schema["values"] = _schema_visitor(
-                            field_schema["values"], previsit_func, namespace, postvisit_func, visited_schemas)
+                            field_schema["values"], visited_schemas, namespace, pre_visit_func, post_visit_func, "map")
                     if isinstance(field_schema["values"], typing.Sequence) and not isinstance(field_schema["values"], str):
-                        field_schema["values"] = [_schema_visitor(subschema, previsit_func, namespace, postvisit_func, visited_schemas)
+                        field_schema["values"] = [_schema_visitor(subschema, visited_schemas, namespace, pre_visit_func, post_visit_func, "map")
                                                   for subschema in field_schema["values"]]
             if isinstance(field["type"], typing.Sequence) and not isinstance(field["type"], str):
-                field["type"] = [_schema_visitor(subschema, previsit_func, namespace, postvisit_func, visited_schemas)
+                field["type"] = [_schema_visitor(subschema, visited_schemas, namespace, pre_visit_func, post_visit_func, "fields")
                                  for subschema in field["type"]]
     elif schema["type"] in ('array'):
         if isinstance(schema["items"], typing.Mapping) and schema["items"]["type"] in ('record', 'enum'):
             schema["items"] = _schema_visitor(
-                schema["items"], previsit_func, namespace, postvisit_func, visited_schemas)
+                schema["items"], visited_schemas, namespace, pre_visit_func, post_visit_func, "array")
         if isinstance(schema["items"], typing.Sequence) and not isinstance(schema["items"], str):
-            schema["items"] = [_schema_visitor(subschema, previsit_func, namespace, postvisit_func, visited_schemas)
+            schema["items"] = [_schema_visitor(subschema, visited_schemas, namespace, pre_visit_func, post_visit_func, "array")
                                for subschema in schema["items"]]
     elif schema["type"] in ('map'):
         if isinstance(schema["values"], typing.Mapping) and schema["values"]["type"] in ('record', 'enum'):
             schema["values"] = _schema_visitor(
-                schema["values"], previsit_func, namespace, postvisit_func, visited_schemas)
+                schema["values"], visited_schemas, namespace, pre_visit_func, post_visit_func, "map")
         if isinstance(schema["values"], typing.Sequence) and not isinstance(schema["values"], str):
-            schema["values"] = [_schema_visitor(subschema, previsit_func, namespace, postvisit_func, visited_schemas)
+            schema["values"] = [_schema_visitor(subschema, visited_schemas, namespace, pre_visit_func, post_visit_func, "map")
                                 for subschema in schema["values"]]
-    schema = postvisit_func(schema, schema_key, visited_schemas)
+    schema = post_visit_func(schema, namespace, visited_schemas, parent_type)
     return schema
